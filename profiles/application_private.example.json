@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "purpose": "Sensitive or unresolved fields for Case A English demo. Do not auto-fill unless user confirms during a specific application.",
+  "unresolved_fields": {
+    "current_city": "",
+    "linkedin_url": "",
+    "work_authorization": "",
+    "visa_sponsorship_required": "",
+    "expected_salary": "",
+    "available_start_date": "",
+    "preferred_locations": []
+  },
+  "phone_policy": {
+    "default_for_english_demo": "+65 86049530",
+    "requires_confirmation": true,
+    "alternatives": {
+      "cn": "+86 13817511539",
+      "sg": "+65 86049530",
+      "_note": "中英文简历号码不一致：中文版 +86(中国)，英文版 +65(新加坡)。投递前请确认当前使用哪个。"
+    }
+  }
+}

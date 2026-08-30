@@ -1,0 +1,418 @@
+import { z } from "zod";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { getWorkspace, reloadWorkspace } from "../config/load.js";
+import { upsertCompany } from "../config/companies.js";
+import { appendEvent } from "../db/repositories/events.js";
+import { countJobs, listQueue, rejectionBreakdown, tierBreakdown, upsertJobs, getJob, getEvaluation } from "../db/repositories/jobs.js";
+import { countSubmittedSince, listApplications } from "../db/repositories/applications.js";
+import { evaluateAndStore } from "../pipeline.js";
+import { discoverJobs, resolveBoards, verifyBoard } from "../sources/registry.js";
+import { scanHiringThread } from "../sources/hackernews.js";
+import { CompanySchema } from "../domain/campaign.js";
+import { startOfDayIso } from "../submission/guards.js";
+import { prepareUntrusted, wrapUntrusted } from "../text/untrusted.js";
+import { AppError } from "../util/errors.js";
+import { handler, ok, okText } from "./helpers.js";
+
+/** Discovery, ranking and campaign reporting tools. */
+
+export function registerDiscoveryTools(server: McpServer): void {
+  server.registerTool(
+    "discover_jobs",
+    {
+      title: "Discover and rank jobs",
+      description:
+        "Fetches every configured ATS board, normalizes the postings, applies the campaign's hard gates, scores what survives, and stores the results. Read-only against employers: no application is created or sent.",
+      inputSchema: {
+        companies: z.array(z.string()).optional().describe("Optional company-name filter; defaults to every active board."),
+        includeIssues: z.boolean().optional().describe("Include per-board fetch failures in the response."),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    },
+    handler(async (args: { companies?: string[]; includeIssues?: boolean }) => {
+      const workspace = getWorkspace();
+      const selected = args.companies?.length
+        ? workspace.companies.filter((company) =>
+            args.companies!.some((name) => name.toLowerCase() === company.name.toLowerCase()),
+          )
+        : workspace.companies;
+
+      if (selected.length === 0) {
+        throw new AppError("no_companies", "no matching companies configured; check companies.json");
+      }
+
+      const discovery = await discoverJobs(selected);
+      const stored = upsertJobs(workspace.db, discovery.jobs);
+      const summary = evaluateAndStore(workspace.db, discovery.jobs, workspace.campaign, workspace.profile);
+
+      appendEvent(workspace.db, "discovery.run", "campaign", {
+        boards: discovery.boardsQueried,
+        found: discovery.jobs.length,
+        accepted: summary.accepted,
+      });
+
+      return ok({
+        boardsQueried: discovery.boardsQueried,
+        postingsFetched: discovery.jobs.length,
+        newPostings: stored.inserted,
+        refreshedPostings: stored.updated,
+        evaluation: summary,
+        totalStoredJobs: countJobs(workspace.db),
+        boardIssues: args.includeIssues === false ? undefined : discovery.issues,
+      });
+    }),
+  );
+
+  server.registerTool(
+    "resolve_company_board",
+    {
+      title: "Find a company's ATS board",
+      description:
+        "Probes Greenhouse, Lever and Ashby for a company's public board slug. Board tokens are not published centrally, so guesses must be verified before being added to companies.json. Workday is not probed: its tenant, datacenter and site slug cannot be guessed, so find that URL on the employer's careers page and record it with add_company_board.",
+      inputSchema: {
+        companyName: z.string().min(1).describe("Company name, for example 'Anthropic'."),
+        extraSlugs: z.array(z.string()).optional().describe("Additional slug candidates to probe."),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    handler(async (args: { companyName: string; extraSlugs?: string[] }) => {
+      const matches = await resolveBoards(args.companyName, args.extraSlugs ?? []);
+      return ok({
+        companyName: args.companyName,
+        matches,
+        hint:
+          matches.length === 0
+            ? "No Greenhouse, Lever or Ashby board found. The company may use Workday or a custom system: find its careers URL and record it with add_company_board, which verifies the slug before saving."
+            : "Save the chosen match with add_company_board, which confirms it serves postings before writing it to companies.json.",
+      });
+    }),
+  );
+
+  server.registerTool(
+    "add_company_board",
+    {
+      title: "Verify and save a company's board",
+      description:
+        "Checks that a candidate board actually serves postings, then saves it to companies.json. Nothing is saved unless postings were seen, because a wrong slug often answers 200 with a generic page rather than an error. Use this to record boards found elsewhere — a careers-page URL or a web search — including Workday, which cannot be probed by guessing.",
+      inputSchema: {
+        name: z.string().min(1).describe("Company name as it should appear in the queue."),
+        ats: z.enum(["greenhouse", "lever", "ashby", "workday"]),
+        board: z
+          .string()
+          .min(1)
+          .describe('Board slug. For Workday this is the "tenant/datacenter/site" triple, e.g. nvidia/wd5/NVIDIAExternalCareerSite.'),
+        tier: z.enum(["A", "B", "C"]).optional(),
+        tags: z.array(z.string()).optional(),
+        query: z.string().optional().describe("Server-side search filter, for boards that support one. Strongly recommended for large Workday tenants."),
+        region: z.enum(["global", "eu"]).optional(),
+        save: z.boolean().optional().describe("Set false to verify without writing to companies.json."),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    },
+    handler(async (args: {
+      name: string;
+      ats: "greenhouse" | "lever" | "ashby" | "workday";
+      board: string;
+      tier?: "A" | "B" | "C";
+      tags?: string[];
+      query?: string;
+      region?: "global" | "eu";
+      save?: boolean;
+    }) => {
+      const workspace = getWorkspace();
+      const candidate = CompanySchema.parse({
+        name: args.name,
+        ats: args.ats,
+        board: args.board,
+        ...(args.tier ? { tier: args.tier } : {}),
+        ...(args.tags ? { tags: args.tags } : {}),
+        ...(args.query ? { query: args.query } : {}),
+        ...(args.region ? { region: args.region } : {}),
+      });
+
+      const verification = await verifyBoard(candidate);
+      if (!verification.ok) {
+        return ok({
+          saved: false,
+          verified: false,
+          company: candidate.name,
+          board: candidate.board,
+          reason: verification.detail,
+          hint: "Open the employer's own careers page and copy the board slug out of the URL. A slug that cannot be verified is not recorded.",
+        });
+      }
+
+      if (args.save === false) {
+        return ok({ saved: false, verified: true, company: candidate.name, board: candidate.board, ...verification });
+      }
+
+      const result = upsertCompany(workspace.paths.companies, candidate);
+      appendEvent(workspace.db, "board.added", "campaign", {
+        company: candidate.name,
+        ats: candidate.ats,
+        board: candidate.board,
+        action: result.action,
+      });
+      // Reload so the new board is live for the next discover_jobs without a restart.
+      reloadWorkspace();
+
+      return ok({
+        saved: true,
+        verified: true,
+        action: result.action,
+        company: candidate.name,
+        ats: candidate.ats,
+        board: candidate.board,
+        postings: verification.postings,
+        sampleTitles: verification.sampleTitles,
+        totalBoards: result.total,
+      });
+    }),
+  );
+
+  server.registerTool(
+    "scan_hiring_thread",
+    {
+      title: "Find new boards from Hacker News 'Who is hiring?'",
+      description:
+        "Scans a monthly Hacker News 'Ask HN: Who is hiring?' thread for links to employers' own ATS boards, verifies each one actually serves postings, and optionally saves the new ones to companies.json. This is a lead source, not a job source: the thread's prose cannot be gated on reliably, so only the board slug is taken and discover_jobs then ingests every role at that company with full structured pay and location. Free to call — it uses the public Hacker News API and no third-party scraping credits.",
+      inputSchema: {
+        threadId: z
+          .string()
+          .optional()
+          .describe("Hacker News item id. Defaults to the most recent monthly thread."),
+        save: z
+          .boolean()
+          .optional()
+          .describe("Save verified new boards to companies.json. Defaults to false, so a scan is read-only unless asked."),
+        tier: z.enum(["A", "B", "C"]).optional().describe("Company tier to record for saved boards. Defaults to C, since a thread post is not evidence of tier."),
+        limit: z.number().int().min(1).max(200).optional().describe("Maximum leads to verify. Each costs one request."),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    },
+    handler(async (args: { threadId?: string; save?: boolean; tier?: "A" | "B" | "C"; limit?: number }) => {
+      const workspace = getWorkspace();
+      const { thread, leads } = await scanHiringThread(args.threadId);
+
+      const known = new Set(
+        workspace.companies.map((company) => `${company.ats}:${company.board.toLowerCase()}`),
+      );
+      const fresh = leads.filter((lead) => !known.has(`${lead.ats}:${lead.board}`));
+      const considered = fresh.slice(0, args.limit ?? 60);
+
+      const verified: Array<{ company: string; ats: string; board: string; postings: number; saved: boolean }> = [];
+      const rejected: Array<{ company: string; ats: string; board: string; reason: string }> = [];
+
+      for (const lead of considered) {
+        const candidate = CompanySchema.parse({
+          name: lead.companyName,
+          ats: lead.ats,
+          board: lead.board,
+          tier: args.tier ?? "C",
+          tags: ["hacker-news"],
+        });
+        const check = await verifyBoard(candidate);
+        if (!check.ok) {
+          rejected.push({ company: candidate.name, ats: lead.ats, board: lead.board, reason: check.detail });
+          continue;
+        }
+        let saved = false;
+        if (args.save === true) {
+          upsertCompany(workspace.paths.companies, candidate);
+          appendEvent(workspace.db, "board.added", "campaign", {
+            company: candidate.name,
+            ats: candidate.ats,
+            board: candidate.board,
+            source: "hacker-news",
+            thread: thread.id,
+          });
+          saved = true;
+        }
+        verified.push({
+          company: candidate.name,
+          ats: lead.ats,
+          board: lead.board,
+          postings: check.postings,
+          saved,
+        });
+      }
+
+      if (args.save === true && verified.length > 0) reloadWorkspace();
+
+      return ok({
+        thread,
+        leadsFound: leads.length,
+        alreadyKnown: leads.length - fresh.length,
+        verified,
+        rejected,
+        hint:
+          args.save === true
+            ? "Saved boards are live now; run discover_jobs to ingest their postings."
+            : "Nothing was saved. Re-run with save=true to add the verified boards.",
+      });
+    }),
+  );
+
+  server.registerTool(
+    "list_queue",
+    {
+      title: "List the ranked application queue",
+      description:
+        "Returns gated-in jobs ordered by score. Roles already applied to are excluded by fingerprint, so the same posting on a second board is not surfaced twice.",
+      inputSchema: {
+        minScore: z.number().optional(),
+        tiers: z.array(z.enum(["A", "B", "C"])).optional(),
+        trackId: z.string().optional(),
+        trackIds: z.array(z.string()).optional(),
+        locationClasses: z
+          .array(z.enum(["bay-area", "us-other", "canada", "remote-us", "remote-canada", "remote-global", "other", "unknown"]))
+          .optional(),
+        companies: z.array(z.string()).optional(),
+        minCompensation: z.number().optional().describe("Minimum annualized top-of-range pay in the campaign currency."),
+        allowUnknownCompensation: z.boolean().optional().describe("Include postings with no published pay."),
+        limit: z.number().int().positive().max(500).optional(),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    handler(async (args: {
+      minScore?: number;
+      tiers?: string[];
+      trackId?: string;
+      trackIds?: string[];
+      locationClasses?: string[];
+      companies?: string[];
+      minCompensation?: number;
+      allowUnknownCompensation?: boolean;
+      limit?: number;
+    }) => {
+      const workspace = getWorkspace();
+      const items = listQueue(workspace.db, {
+        minScore: args.minScore ?? workspace.campaign.scoring.thresholds.tierC,
+        tiers: args.tiers,
+        trackId: args.trackId ?? null,
+        trackIds: args.trackIds,
+        locationClasses: args.locationClasses,
+        companies: args.companies,
+        minCompensation: args.minCompensation,
+        allowUnknownCompensation: args.allowUnknownCompensation ?? true,
+        fx: workspace.campaign.compensation.fx,
+        maxPerCompany: workspace.campaign.submission.maxPerCompany,
+        limit: args.limit ?? 25,
+      });
+
+      return ok({
+        count: items.length,
+        jobs: items.map((item) => ({
+          jobId: item.job.id,
+          score: item.evaluation.score,
+          tier: item.evaluation.tier,
+          track: item.evaluation.trackId,
+          company: item.job.companyName,
+          title: item.job.title,
+          location: item.job.locationsRaw.join(" | "),
+          locationClass: item.job.locationClass,
+          workplaceType: item.job.workplaceType,
+          compensation: item.job.compensation?.raw ?? "not published",
+          postedAt: item.job.postedAt,
+          url: item.job.url,
+          flags: item.evaluation.flags,
+        })),
+      });
+    }),
+  );
+
+  server.registerTool(
+    "explain_job",
+    {
+      title: "Explain a job evaluation",
+      description:
+        "Returns the full gate result, score breakdown with quoted evidence, and the posting text wrapped as untrusted data.",
+      inputSchema: {
+        jobId: z.string().min(1),
+        includeDescription: z.boolean().optional(),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    handler(async (args: { jobId: string; includeDescription?: boolean }) => {
+      const workspace = getWorkspace();
+      const job = getJob(workspace.db, args.jobId);
+      if (!job) throw new AppError("job_not_found", `no job stored with id ${args.jobId}`);
+      const evaluation = getEvaluation(workspace.db, args.jobId);
+
+      const body = {
+        job: {
+          id: job.id,
+          company: job.companyName,
+          title: job.title,
+          locations: job.locationsRaw,
+          locationClass: job.locationClass,
+          country: job.country,
+          workplaceType: job.workplaceType,
+          compensation: job.compensation,
+          postedAt: job.postedAt,
+          url: job.url,
+          applyUrl: job.applyUrl,
+        },
+        evaluation,
+      };
+
+      if (args.includeDescription === false) return ok(body);
+      const untrusted = prepareUntrusted(job.descriptionText, 12_000);
+      return okText(
+        `${JSON.stringify(body, null, 2)}\n\n${wrapUntrusted(`${job.companyName} - ${job.title}`, untrusted)}`,
+      );
+    }),
+  );
+
+  server.registerTool(
+    "campaign_status",
+    {
+      title: "Campaign status and metrics",
+      description:
+        "Summarizes progress toward the application target, pipeline health, tier distribution and the most common rejection reasons.",
+      inputSchema: {},
+      annotations: { readOnlyHint: true },
+    },
+    handler(async () => {
+      const workspace = getWorkspace();
+      const applications = listApplications(workspace.db, undefined, 1000);
+      const byStatus = applications.reduce<Record<string, number>>((acc, application) => {
+        acc[application.status] = (acc[application.status] ?? 0) + 1;
+        return acc;
+      }, {});
+
+      const queue = listQueue(workspace.db, { minScore: workspace.campaign.scoring.thresholds.tierC, limit: 1000 });
+      const submitted = applications.filter((application) => application.status === "submitted");
+
+      // Compare the campaign's intended track mix with what is actually queued
+      // and submitted, so the mix can be steered rather than drifting.
+      const queueByTrack = queue.reduce<Record<string, number>>((acc, item) => {
+        const track = item.evaluation.trackId ?? "unassigned";
+        acc[track] = (acc[track] ?? 0) + 1;
+        return acc;
+      }, {});
+      const trackAllocation = workspace.campaign.tracks.map((track) => ({
+        trackId: track.id,
+        targetShare: track.allocation,
+        targetApplications: Math.round(track.allocation * workspace.campaign.targetApplications),
+        queued: queueByTrack[track.id] ?? 0,
+      }));
+
+      return ok({
+        campaign: workspace.campaign.name,
+        target: workspace.campaign.targetApplications,
+        submitted: submitted.length,
+        remainingToTarget: Math.max(0, workspace.campaign.targetApplications - submitted.length),
+        submittedToday: countSubmittedSince(workspace.db, startOfDayIso()),
+        dailyLimit: workspace.campaign.submission.dailyLimit,
+        submissionMode: workspace.campaign.submission.mode,
+        applicationsByStatus: byStatus,
+        storedJobs: countJobs(workspace.db),
+        acceptedByTier: tierBreakdown(workspace.db),
+        topRejectionReasons: rejectionBreakdown(workspace.db).slice(0, 12),
+        queueDepth: queue.length,
+        trackAllocation,
+      });
+    }),
+  );
+}

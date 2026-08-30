@@ -1,0 +1,561 @@
+{
+  "version": 1,
+  "identity": {
+    "fullName": "Tianyi Zhou",
+    "headline": "Data / Analytics / FinTech Candidate",
+    "email": "tianyi_zhou2000@163.com",
+    "phone": "+65 86049530",
+    "location": {
+      "city": "",
+      "region": "",
+      "country": ""
+    },
+    "links": {
+      "linkedin": "",
+      "github": "",
+      "website": ""
+    }
+  },
+  "personal": {
+    "dateOfBirth": {
+      "value": "",
+      "autoFill": false
+    },
+    "address": {
+      "street": "",
+      "city": "",
+      "region": "",
+      "postalCode": "",
+      "country": ""
+    },
+    "addressAutoFill": false,
+    "legalAgeConfirmation": {
+      "value": "",
+      "autoFill": false
+    },
+    "previousEmployment": {
+      "value": "",
+      "autoFill": false
+    },
+    "demographics": {
+      "gender": {
+        "value": "",
+        "autoFill": false
+      },
+      "pronouns": {
+        "value": "",
+        "autoFill": false
+      },
+      "raceEthnicity": {
+        "value": "",
+        "autoFill": false
+      },
+      "hispanicLatino": {
+        "value": "",
+        "autoFill": false
+      },
+      "veteranStatus": {
+        "value": "",
+        "autoFill": false
+      },
+      "disabilityStatus": {
+        "value": "",
+        "autoFill": false
+      }
+    }
+  },
+  "workAuthorization": {
+    "citizenships": [
+      "UNCONFIRMED"
+    ],
+    "authorizedIn": [],
+    "noSponsorshipRequiredIn": [],
+    "requiresSponsorshipIn": [],
+    "statement": "Work authorization and sponsorship answers are not pre-approved; ask the candidate before answering any such question.",
+    "alwaysReviewManually": true
+  },
+  "compensation": {
+    "currency": "USD",
+    "targetTotal": 1,
+    "minimumTotal": 1,
+    "disclosurePolicy": "decline",
+    "rangeStatement": "Open to discussing compensation once both sides have assessed fit."
+  },
+  "preferences": {
+    "willingToRelocate": false,
+    "relocationTargets": [],
+    "workplaceTypes": [
+      "onsite",
+      "hybrid",
+      "remote"
+    ],
+    "noticePeriod": ""
+  },
+  "resumes": [
+    {
+      "id": "english-general",
+      "label": "English General Resume",
+      "path": "C:/Users/24779/Desktop/AI related/Case A_Job Auto Apply/.autoapply/resumes/Resume_EN.pdf",
+      "tracks": [
+        "data-analytics"
+      ],
+      "isDefault": true
+    }
+  ],
+  "skills": [
+    {
+      "name": "Python",
+      "aliases": [],
+      "level": "strong",
+      "tags": [
+        "programming"
+      ]
+    },
+    {
+      "name": "Linear Regression",
+      "aliases": [],
+      "level": "strong",
+      "tags": [
+        "ml_dl"
+      ]
+    },
+    {
+      "name": "RNN",
+      "aliases": [],
+      "level": "working",
+      "tags": [
+        "ml_dl"
+      ]
+    },
+    {
+      "name": "LSTM",
+      "aliases": [],
+      "level": "working",
+      "tags": [
+        "ml_dl"
+      ]
+    },
+    {
+      "name": "Clustering",
+      "aliases": [],
+      "level": "strong",
+      "tags": [
+        "ml_dl"
+      ]
+    },
+    {
+      "name": "PyTorch",
+      "aliases": [],
+      "level": "strong",
+      "tags": [
+        "ml_dl"
+      ]
+    },
+    {
+      "name": "Statistical Learning",
+      "aliases": [],
+      "level": "working",
+      "tags": [
+        "ml_dl"
+      ]
+    },
+    {
+      "name": "Data Analysis",
+      "aliases": [],
+      "level": "strong",
+      "tags": [
+        "data"
+      ]
+    },
+    {
+      "name": "Data Preprocessing",
+      "aliases": [],
+      "level": "working",
+      "tags": [
+        "data"
+      ]
+    },
+    {
+      "name": "Data Mining",
+      "aliases": [],
+      "level": "working",
+      "tags": [
+        "data"
+      ]
+    },
+    {
+      "name": "Statistics",
+      "aliases": [],
+      "level": "strong",
+      "tags": [
+        "data"
+      ]
+    },
+    {
+      "name": "Forecasting",
+      "aliases": [],
+      "level": "strong",
+      "tags": [
+        "data"
+      ]
+    },
+    {
+      "name": "Operations Research",
+      "aliases": [],
+      "level": "strong",
+      "tags": [
+        "data"
+      ]
+    },
+    {
+      "name": "Wind Financial Terminal",
+      "aliases": [],
+      "level": "working",
+      "tags": [
+        "tools"
+      ]
+    },
+    {
+      "name": "ArcGIS",
+      "aliases": [],
+      "level": "working",
+      "tags": [
+        "tools"
+      ]
+    },
+    {
+      "name": "Database (SQL)",
+      "aliases": [],
+      "level": "working",
+      "tags": [
+        "tools"
+      ]
+    },
+    {
+      "name": "E-commerce",
+      "aliases": [],
+      "level": "working",
+      "tags": [
+        "domain"
+      ]
+    },
+    {
+      "name": "Fintech / Investment",
+      "aliases": [],
+      "level": "working",
+      "tags": [
+        "domain"
+      ]
+    },
+    {
+      "name": "Consulting",
+      "aliases": [],
+      "level": "working",
+      "tags": [
+        "domain"
+      ]
+    },
+    {
+      "name": "Mathematical Modeling",
+      "aliases": [],
+      "level": "working",
+      "tags": [
+        "domain"
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "exp-1",
+      "statement": "Contributed to system architecture design for a China futures company (order management, settlement, warehouse systems); investigated exchange interfaces and trading rules, mapping data flows across interfaces.",
+      "category": "experience",
+      "metrics": [],
+      "tags": [
+        "KPMG China",
+        "Assistant Technical Consultant (Intern)"
+      ]
+    },
+    {
+      "id": "exp-2",
+      "statement": "Conducted market research on e-commerce enterprises, rural internet-finance systems and house-rental groups for user segmentation.",
+      "category": "experience",
+      "metrics": [],
+      "tags": [
+        "KPMG China",
+        "Assistant Technical Consultant (Intern)"
+      ]
+    },
+    {
+      "id": "exp-3",
+      "statement": "Assisted IPO of securities/futures companies; wrote and translated development-plan and management-rule materials.",
+      "category": "experience",
+      "metrics": [],
+      "tags": [
+        "KPMG China",
+        "Assistant Technical Consultant (Intern)"
+      ]
+    },
+    {
+      "id": "exp-4",
+      "statement": "Studied investor reactions to fund drawdown to identify drawdown tolerance thresholds by client type, providing frontline colleagues a soothing time-window and targeted reassurance.",
+      "category": "experience",
+      "metrics": [],
+      "tags": [
+        "GF Fund Management Co., Ltd.",
+        "Data Analyst Intern"
+      ]
+    },
+    {
+      "id": "exp-5",
+      "statement": "Explored how investment tenure, risk tolerance, market volatility and peer returns relate to client redemption timing; separately analyzed absolute vs relative returns.",
+      "category": "experience",
+      "metrics": [],
+      "tags": [
+        "GF Fund Management Co., Ltd.",
+        "Data Analyst Intern"
+      ]
+    },
+    {
+      "id": "exp-6",
+      "statement": "Used Python for image plotting, function fitting and cluster analysis.",
+      "category": "experience",
+      "metrics": [],
+      "tags": [
+        "GF Fund Management Co., Ltd.",
+        "Data Analyst Intern"
+      ]
+    },
+    {
+      "id": "project-7",
+      "statement": "The 2nd IKCEST 'Belt and Road' International Big Data Competition: International Excellence Award (rank 47/3023)",
+      "category": "project",
+      "metrics": [],
+      "tags": [
+        "The 2nd IKCEST 'Belt and Road' International Big Data Competition"
+      ]
+    },
+    {
+      "id": "project-8",
+      "statement": "Built predictive model for pandemic transmission using new infections, inter-city migration index and population flow.",
+      "category": "project",
+      "metrics": [
+        "rank 47/3023"
+      ],
+      "tags": [
+        "The 2nd IKCEST 'Belt and Road' International Big Data Competition"
+      ]
+    },
+    {
+      "id": "project-9",
+      "statement": "Forecasted daily infections with linear regression, RNN and LSTM; enlarged training set via linear interpolation; final RMSLE < 1.3 with PyTorch.",
+      "category": "project",
+      "metrics": [
+        "rank 47/3023",
+        "RMSLE < 1.3"
+      ],
+      "tags": [
+        "The 2nd IKCEST 'Belt and Road' International Big Data Competition"
+      ]
+    },
+    {
+      "id": "project-10",
+      "statement": "29th National University Mathematical Modeling Competition: Third Prize (Province)",
+      "category": "project",
+      "metrics": [],
+      "tags": [
+        "29th National University Mathematical Modeling Competition"
+      ]
+    },
+    {
+      "id": "project-11",
+      "statement": "Built credit-risk evaluation, corporate-reputation and bank credit-strategy models for small/micro enterprises from financial indicators.",
+      "category": "project",
+      "metrics": [],
+      "tags": [
+        "29th National University Mathematical Modeling Competition"
+      ]
+    },
+    {
+      "id": "project-12",
+      "statement": "Used Python preprocessing and hierarchical analysis to score enterprise credit risk and recommend loan strategies.",
+      "category": "project",
+      "metrics": [],
+      "tags": [
+        "29th National University Mathematical Modeling Competition"
+      ]
+    },
+    {
+      "id": "project-13",
+      "statement": "30th National University Mathematical Modeling Competition: Second Prize (Province)",
+      "category": "project",
+      "metrics": [],
+      "tags": [
+        "30th National University Mathematical Modeling Competition"
+      ]
+    },
+    {
+      "id": "project-14",
+      "statement": "Modeled catalyst-temperature combinations for C4 olefin yield from ethanol coupling; used dummy variables + multiple linear regression.",
+      "category": "project",
+      "metrics": [],
+      "tags": [
+        "30th National University Mathematical Modeling Competition"
+      ]
+    },
+    {
+      "id": "project-15",
+      "statement": "Solved nonlinear 0-1 programming with Monte Carlo and greedy algorithm in Python to maximize C4 olefin yield.",
+      "category": "project",
+      "metrics": [],
+      "tags": [
+        "30th National University Mathematical Modeling Competition"
+      ]
+    },
+    {
+      "id": "project-16",
+      "statement": "Constructed growth-stock selection indicators/models, built growth fund and FOF (fund of funds) systems, backtested position-control strategies and benchmarked against IT ETF.",
+      "category": "project",
+      "metrics": [],
+      "tags": [
+        "Growth Stock Investment Strategy and Risk Management Research"
+      ]
+    },
+    {
+      "id": "project-17",
+      "statement": "Built enterprise-relationship network from HQ-branch data of listed digital-economy firms using chain-network models and social network analysis.",
+      "category": "project",
+      "metrics": [],
+      "tags": [
+        "Digital Economy Interconnection of the Pearl River Delta Urban Agglomeration"
+      ]
+    },
+    {
+      "id": "project-18",
+      "statement": "Used Wind Financial Terminal + Python preprocessing + ArcGIS to map spatial distribution and analyze network evolution over time.",
+      "category": "project",
+      "metrics": [],
+      "tags": [
+        "Digital Economy Interconnection of the Pearl River Delta Urban Agglomeration"
+      ]
+    },
+    {
+      "id": "edu-19",
+      "statement": "Studied Industrial and System Engineering at National University of Singapore with GPA 4.33 / 5.0",
+      "category": "education",
+      "metrics": [
+        "4.33 / 5.0"
+      ],
+      "tags": [
+        "National University of Singapore",
+        "Industrial and System Engineering"
+      ]
+    },
+    {
+      "id": "edu-20",
+      "statement": "Studied Electronic Commerce at South China University of Technology with GPA 3.7 / 4.0",
+      "category": "education",
+      "metrics": [
+        "3.7 / 4.0"
+      ],
+      "tags": [
+        "South China University of Technology",
+        "Electronic Commerce"
+      ]
+    }
+  ],
+  "experience": [
+    {
+      "company": "KPMG China",
+      "title": "Assistant Technical Consultant (Intern)",
+      "location": "Shanghai, China",
+      "start": "2021-07",
+      "end": "2021-08",
+      "highlights": [
+        "Contributed to system architecture design for a China futures company (order management, settlement, warehouse systems); investigated exchange interfaces and trading rules, mapping data flows across interfaces.",
+        "Conducted market research on e-commerce enterprises, rural internet-finance systems and house-rental groups for user segmentation.",
+        "Assisted IPO of securities/futures companies; wrote and translated development-plan and management-rule materials."
+      ]
+    },
+    {
+      "company": "GF Fund Management Co., Ltd.",
+      "title": "Data Analyst Intern",
+      "location": "Guangzhou, China",
+      "start": "2021-12",
+      "end": "2022-01",
+      "highlights": [
+        "Studied investor reactions to fund drawdown to identify drawdown tolerance thresholds by client type, providing frontline colleagues a soothing time-window and targeted reassurance.",
+        "Explored how investment tenure, risk tolerance, market volatility and peer returns relate to client redemption timing; separately analyzed absolute vs relative returns.",
+        "Used Python for image plotting, function fitting and cluster analysis."
+      ]
+    }
+  ],
+  "education": [
+    {
+      "institution": "National University of Singapore",
+      "credential": "Master",
+      "field": "Industrial and System Engineering",
+      "location": "Singapore",
+      "start": "2022-08",
+      "end": "2024-01"
+    },
+    {
+      "institution": "South China University of Technology",
+      "credential": "Bachelor of Management",
+      "field": "Electronic Commerce",
+      "location": "Guangzhou, China",
+      "start": "2018-09",
+      "end": "2022-06"
+    }
+  ],
+  "answers": [
+    {
+      "key": "source",
+      "label": "How did you hear about us?",
+      "patterns": [
+        "how did you hear",
+        "how did you find",
+        "where did you learn",
+        "source"
+      ],
+      "answer": "Company careers page",
+      "alternatives": [
+        "Company careers page",
+        "Company website",
+        "LinkedIn",
+        "Other"
+      ],
+      "allowAutoFill": true,
+      "note": "Safe non-sensitive source answer for official company-site applications."
+    },
+    {
+      "key": "salary-expectation",
+      "label": "Salary expectation",
+      "patterns": [
+        "salary expectation",
+        "desired salary",
+        "compensation expectation"
+      ],
+      "answer": "Open to discussing compensation once both sides have assessed fit.",
+      "allowAutoFill": false,
+      "note": "Sensitive compensation field; always review manually."
+    }
+  ],
+  "narratives": [
+    {
+      "key": "why-role",
+      "label": "Why this role / company?",
+      "patterns": [
+        "why {company}",
+        "why do you want to work",
+        "why are you interested",
+        "what interests you about",
+        "cover letter",
+        "what excites you about this role"
+      ],
+      "template": "My academic training in Industrial and Systems Engineering and experience in data analysis, consulting, and financial analytics align with {company}'s work on {topics}. For the {role} role, I would aim to apply my Python, statistics, forecasting, and machine learning background to practical business problems.",
+      "allowAutoFill": false,
+      "minTopics": 1,
+      "note": "Draft only; user must review before use."
+    }
+  ]
+}

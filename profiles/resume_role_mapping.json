@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "mappings": [
+    {
+      "profile": "profile_en.json",
+      "resume_file": "resumes/pdf/Resume_EN.pdf",
+      "target_regions": [
+        "APAC"
+      ],
+      "target_companies": [
+        "OMP"
+      ],
+      "industries": [
+        "Supply Chain Planning Software",
+        "Consulting",
+        "Operations Research / Optimization",
+        "Enterprise Software"
+      ],
+      "role_categories": [
+        "Supply Chain Planning",
+        "Technical Consultant",
+        "Integration Consultant",
+        "Product Consultant",
+        "Operations Research"
+      ],
+      "notes": "Updated after user confirmation for OMP APAC demo scope."
+    }
+  ]
+}

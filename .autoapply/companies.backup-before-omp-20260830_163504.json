@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "companies": [
+    {
+      "name": "Stripe",
+      "ats": "greenhouse",
+      "board": "stripe",
+      "tier": "A",
+      "tags": [
+        "fintech",
+        "singapore",
+        "data"
+      ]
+    },
+    {
+      "name": "Coinbase",
+      "ats": "greenhouse",
+      "board": "coinbase",
+      "tier": "A",
+      "tags": [
+        "fintech",
+        "remote",
+        "data"
+      ]
+    },
+    {
+      "name": "Airbnb",
+      "ats": "greenhouse",
+      "board": "airbnb",
+      "tier": "B",
+      "tags": [
+        "marketplace",
+        "apac",
+        "data"
+      ]
+    },
+    {
+      "name": "Figma",
+      "ats": "greenhouse",
+      "board": "figma",
+      "tier": "B",
+      "tags": [
+        "product",
+        "data"
+      ]
+    },
+    {
+      "name": "Upstart",
+      "ats": "greenhouse",
+      "board": "upstart",
+      "tier": "B",
+      "tags": [
+        "fintech",
+        "data"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "language_scope": "English only",
+  "target_regions": [
+    "APAC"
+  ],
+  "target_industries": [
+    "Supply Chain Planning Software",
+    "Consulting",
+    "Operations Research / Optimization",
+    "Enterprise Software"
+  ],
+  "target_role_categories": [
+    "Supply Chain Planning",
+    "Technical Consultant",
+    "Integration Consultant",
+    "Product Consultant",
+    "Operations Research"
+  ],
+  "excluded_companies": [],
+  "excluded_industries": [],
+  "autofill_policy": {
+    "mode": "semi_automated_only",
+    "never_auto_submit": true,
+    "sensitive_fields_require_user_confirmation": [
+      "work authorization",
+      "visa status",
+      "sponsorship requirement",
+      "expected salary",
+      "current location",
+      "available start date",
+      "legal attestations",
+      "criminal history",
+      "EEO/disability/veteran/demographic information",
+      "background check authorization"
+    ]
+  },
+  "notes": "User confirmed APAC and OMP Supply Chain Planning / Technical Consultant / Operations Research as the test scope.",
+  "target_companies": [
+    "OMP"
+  ],
+  "target_company_notes": {
+    "OMP": {
+      "career_url": "https://careers.omp.com/",
+      "linkedin_jobs_url": "https://www.linkedin.com/company/omp-supply-chain-planning/jobs",
+      "ats_status": "No Greenhouse / Lever / Ashby board resolved; likely custom careers site.",
+      "recommended_tool": "Hermes browser automation only unless a supported ATS board is later identified."
+    }
+  }
+}

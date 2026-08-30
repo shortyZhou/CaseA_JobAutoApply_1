@@ -1,0 +1,44 @@
+{
+  "application_id": "app-omp-4950152101-test",
+  "job_id": "omp-4950152101",
+  "company": "OMP",
+  "job_title": "Product Consultant",
+  "location": "Shanghai, China / APAC",
+  "job_url": "https://careers.omp.com/jobs/china-shanghai/product-consultant-4950152101",
+  "application_url": "https://careers.omp.com/apply?job=4950152101&title=Product+Consultant+(CN-Shanghai)&location=China-Shanghai",
+  "profile_used": "profiles/profile_en.json",
+  "resume_used": "resumes/pdf/Resume_EN.pdf",
+  "tool_combination": "Hermes preview/browser automation; OMP custom company site; autoapply-mcp not used for form fill because no Greenhouse/Lever/Ashby board was detected.",
+  "safety_policy": {
+    "never_auto_submit": true,
+    "final_submit_button": "Submit",
+    "status": "stopped_before_submit"
+  },
+  "fields_detected": [
+    {"field": "Job", "required": false, "status": "pre-filled by site", "value": "Product Consultant (CN-Shanghai)"},
+    {"field": "First name", "required": true, "status": "filled", "value": "Tianyi"},
+    {"field": "Last name", "required": true, "status": "filled", "value": "Zhou"},
+    {"field": "Email", "required": true, "status": "filled", "value": "tianyi_zhou2000@163.com"},
+    {"field": "Your LinkedIn profile", "required": false, "status": "not filled", "reason": "profile_en.json currently has empty LinkedIn URL"},
+    {"field": "Years of experience", "required": true, "status": "needs user confirmation", "options": ["0", "1-3", "4-5", "6-10", "10+"]},
+    {"field": "Country of residence", "required": true, "status": "needs user confirmation", "reason": "current residence/location is sensitive and must not be guessed"},
+    {"field": "How did you find us?", "required": true, "status": "needs user confirmation or user-approved default", "suggested_value": "Google search or Company website if available"},
+    {"field": "Resume in English", "required": true, "status": "not uploaded by agent yet", "file": "C:/Users/24779/Desktop/AI related/Case A_Job Auto Apply/resumes/pdf/Resume_EN.pdf"},
+    {"field": "Cover Letter", "required": false, "status": "optional draft available on request"}
+  ],
+  "role_fit_summary": {
+    "match_score": 91,
+    "strengths": [
+      "NUS Industrial and Systems Engineering background",
+      "Operations Research and mathematical modeling skills",
+      "Python, SQL/basic programming and analytics profile",
+      "Technical consulting internship experience",
+      "English/Chinese requirement appears aligned"
+    ],
+    "risks_or_gaps": [
+      "Supply-chain planning/business-software implementation experience appears as a bonus/gap rather than explicit past work",
+      "Travel flexibility needs user confirmation",
+      "China work authorization / residence must be confirmed by user"
+    ]
+  }
+}

@@ -1,0 +1,2 @@
+# Browser binaries (re-downloadable via playwright install)
+.playwright-browsers/

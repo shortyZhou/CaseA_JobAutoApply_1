@@ -1,0 +1,184 @@
+{
+  "version": 1,
+  "name": "case-a-english-demo",
+  "targetApplications": 10,
+  "tracks": [
+    {
+      "id": "data-analytics",
+      "label": "Data / Analytics / FinTech roles",
+      "allocation": 1.0,
+      "titleIncludes": [
+        "data analyst",
+        "business analyst",
+        "data scientist",
+        "analytics",
+        "machine learning",
+        "fintech",
+        "quantitative",
+        "strategy analyst",
+        "operations analyst"
+      ],
+      "titleExcludes": [
+        "sales",
+        "marketing",
+        "recruiter",
+        "hr",
+        "manager",
+        "director",
+        "principal",
+        "staff"
+      ],
+      "keywords": [
+        {
+          "term": "Python",
+          "weight": 3
+        },
+        {
+          "term": "SQL",
+          "weight": 2
+        },
+        {
+          "term": "data analysis",
+          "weight": 3
+        },
+        {
+          "term": "statistics",
+          "weight": 2
+        },
+        {
+          "term": "forecasting",
+          "weight": 2
+        },
+        {
+          "term": "machine learning",
+          "weight": 2,
+          "aliases": [
+            "ML"
+          ]
+        },
+        {
+          "term": "fintech",
+          "weight": 2
+        },
+        {
+          "term": "consulting",
+          "weight": 1
+        }
+      ],
+      "resumeId": "english-general"
+    }
+  ],
+  "locations": {
+    "allow": [
+      "remote-global",
+      "other",
+      "unknown"
+    ],
+    "workplaceTypes": [
+      "onsite",
+      "hybrid",
+      "remote",
+      "unknown"
+    ],
+    "includePatterns": [
+      "Singapore",
+      "APAC",
+      "Hong Kong",
+      "Remote",
+      "China"
+    ],
+    "excludePatterns": []
+  },
+  "compensation": {
+    "currency": "USD",
+    "floors": {
+      "US": 1,
+      "SG": 1,
+      "HK": 1,
+      "CN": 1
+    },
+    "fx": {
+      "USD": 1,
+      "SGD": 0.78,
+      "HKD": 0.13,
+      "CNY": 0.14
+    },
+    "allowUnknown": true,
+    "rejectBelowFloor": false
+  },
+  "seniority": {
+    "allow": [
+      "entry-level",
+      "new-grad",
+      "junior",
+      "associate",
+      "analyst",
+      "unspecified"
+    ],
+    "reject": [
+      "manager",
+      "director",
+      "executive",
+      "principal",
+      "staff"
+    ]
+  },
+  "exclusions": {
+    "titlePatterns": [
+      "recruiter",
+      "account executive",
+      "sales",
+      "marketing"
+    ],
+    "descriptionPatterns": [
+      "security clearance required"
+    ],
+    "companies": []
+  },
+  "scoring": {
+    "weights": {
+      "roleAlignment": 30,
+      "domainAlignment": 20,
+      "stackAlignment": 20,
+      "seniority": 15,
+      "compensation": 0,
+      "workAuthorization": 10,
+      "freshness": 5
+    },
+    "thresholds": {
+      "tierA": 85,
+      "tierB": 75,
+      "tierC": 65
+    }
+  },
+  "freshnessDays": 45,
+  "submission": {
+    "mode": "manual",
+    "allowedAtsDomains": [
+      "boards.greenhouse.io",
+      "job-boards.greenhouse.io",
+      "jobs.lever.co",
+      "jobs.ashbyhq.com"
+    ],
+    "allowedCompanies": [],
+    "dailyLimit": 3,
+    "maxBatchSize": 1,
+    "maxPerCompany": 1,
+    "minDelaySeconds": 60,
+    "blockedQuestionCategories": [
+      "work-authorization",
+      "sponsorship",
+      "citizenship",
+      "clearance",
+      "criminal-history",
+      "compensation",
+      "demographic",
+      "veteran",
+      "disability",
+      "legal-attestation",
+      "essay",
+      "reference"
+    ],
+    "captureScreenshots": true
+  }
+}

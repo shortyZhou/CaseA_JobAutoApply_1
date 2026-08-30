@@ -1,0 +1,147 @@
+{
+  "candidate": {
+    "name": { "first": "Shorty", "last": "Zhou", "chinese": "Shorty Zhou" },
+    "email": "",
+    "phones": {},
+    "location": {
+      "base_cn": "广州",
+      "history": ["广州", "上海", "新加坡"],
+      "current_city": "简历未注明当前城市，需本人补充"
+    },
+    "linkedin": "",
+    "work_authorization": { "_note": "需本人填写（中国公民/海外签证状态等）" },
+    "sponsorship": { "_note": "是否需要签证担保，需本人填写" }
+  },
+  "education": [
+    {
+      "school": "National University of Singapore",
+      "school_cn": "新加坡国立大学",
+      "degree": "Master",
+      "field": "Industrial and System Engineering",
+      "field_cn": "工业和系统工程",
+      "faculty": "College of Engineering",
+      "start": "2022-08",
+      "end": "2024-01",
+      "gpa": "",
+      "location": "Singapore",
+      "coursework": [
+        "Stochastic Models and their Applications",
+        "Applied Engineering Statistics",
+        "Applied Programming for Industrial Systems",
+        "Statistical Learning in Engineering",
+        "Applied Forecasting Methods"
+      ],
+      "coursework_cn": ["随机模型及其应用", "应用工程统计", "工业系统的应用编程", "工程中的统计学习", "应用预测方法"]
+    },
+    {
+      "school": "South China University of Technology",
+      "school_cn": "华南理工大学",
+      "degree": "Bachelor of Management",
+      "field": "Electronic Commerce",
+      "field_cn": "电子商务",
+      "start": "2018-09",
+      "end": "2022-06",
+      "gpa": "",
+      "location": "Guangzhou, China",
+      "coursework": ["Statistics", "Operations Research", "Database Principles and Applications", "Data Mining", "Data Structures", "Python Data Analysis"],
+      "coursework_cn": ["统计学", "运筹学", "数据库原理和应用", "数据挖掘", "数据结构", "Python数据分析"],
+      "honors": ["Philip K.H. Wong Foundation (2021)", "First-class Scholarship (2020)", "Outstanding Student Leader (2019)"],
+      "honors_cn": ["华南理工大学校级一等奖学金", "华南理工大学“三好学生”", "华南理工大学优秀学生干部"]
+    }
+  ],
+  "experience": [
+    {
+      "company": "KPMG China",
+      "company_cn": "毕马威企业咨询（中国）有限公司",
+      "title": "Assistant Technical Consultant (Intern)",
+      "title_cn": "技术咨询实习生",
+      "start": "2021-07",
+      "end": "2021-08",
+      "location": "Shanghai, China",
+      "bullets": [
+        "Contributed to system architecture design for a China futures company (order management, settlement, warehouse systems); investigated exchange interfaces and trading rules, mapping data flows across interfaces.",
+        "Conducted market research on e-commerce enterprises, rural internet-finance systems and house-rental groups for user segmentation.",
+        "Assisted IPO of securities/futures companies; wrote and translated development-plan and management-rule materials."
+      ]
+    },
+    {
+      "company": "GF Fund Management Co., Ltd.",
+      "company_cn": "广发基金管理有限公司",
+      "title": "Data Analyst Intern",
+      "title_cn": "数据分析实习生",
+      "start": "2021-12",
+      "end": "2022-01",
+      "location": "Guangzhou, China",
+      "bullets": [
+        "Studied investor reactions to fund drawdown to identify drawdown tolerance thresholds by client type, providing frontline colleagues a soothing time-window and targeted reassurance.",
+        "Explored how investment tenure, risk tolerance, market volatility and peer returns relate to client redemption timing; separately analyzed absolute vs relative returns.",
+        "Used Python for image plotting, function fitting and cluster analysis."
+      ]
+    }
+  ],
+  "research_projects": [
+    {
+      "name": "The 2nd IKCEST 'Belt and Road' International Big Data Competition",
+      "award": "International Excellence Award (rank 47/3023)",
+      "start": "2020-05",
+      "end": "2020-09",
+      "highlights": [
+        "Built predictive model for pandemic transmission using new infections, inter-city migration index and population flow.",
+        "Forecasted daily infections with linear regression, RNN and LSTM; enlarged training set via linear interpolation; final RMSLE < 1.3 with PyTorch."
+      ]
+    },
+    {
+      "name": "29th National University Mathematical Modeling Competition",
+      "award": "Third Prize (Province)",
+      "start": "2020-09",
+      "end": "2020-09",
+      "highlights": [
+        "Built credit-risk evaluation, corporate-reputation and bank credit-strategy models for small/micro enterprises from financial indicators.",
+        "Used Python preprocessing and hierarchical analysis to score enterprise credit risk and recommend loan strategies."
+      ]
+    },
+    {
+      "name": "30th National University Mathematical Modeling Competition",
+      "award": "Second Prize (Province)",
+      "start": "2021-09",
+      "end": "2021-09",
+      "highlights": [
+        "Modeled catalyst-temperature combinations for C4 olefin yield from ethanol coupling; used dummy variables + multiple linear regression.",
+        "Solved nonlinear 0-1 programming with Monte Carlo and greedy algorithm in Python to maximize C4 olefin yield."
+      ]
+    },
+    {
+      "name": "Growth Stock Investment Strategy and Risk Management Research",
+      "start": "2022-01",
+      "end": "2022-06",
+      "highlights": [
+        "Constructed growth-stock selection indicators/models, built growth fund and FOF (fund of funds) systems, backtested position-control strategies and benchmarked against IT ETF."
+      ]
+    },
+    {
+      "name": "Digital Economy Interconnection of the Pearl River Delta Urban Agglomeration",
+      "start": "2022-04",
+      "end": "2023-06",
+      "highlights": [
+        "Built enterprise-relationship network from HQ-branch data of listed digital-economy firms using chain-network models and social network analysis.",
+        "Used Wind Financial Terminal + Python preprocessing + ArcGIS to map spatial distribution and analyze network evolution over time."
+      ]
+    }
+  ],
+  "skills": {
+    "programming": ["Python"],
+    "ml_dl": ["Linear Regression", "RNN", "LSTM", "Clustering", "PyTorch", "Statistical Learning"],
+    "data": ["Data Analysis", "Data Preprocessing", "Data Mining", "Statistics", "Forecasting", "Operations Research"],
+    "tools": ["Wind Financial Terminal", "ArcGIS", "Database (SQL)"],
+    "domain": ["E-commerce", "Fintech / Investment", "Consulting", "Mathematical Modeling"]
+  },
+  "languages": [
+    { "name": "Chinese", "proficiency": "Native" },
+    { "name": "English", "proficiency": "Fluent (full-time study at NUS)" }
+  ],
+  "open_question_material": {
+    "self_intro_cn": "华南理工电子商务本科 + 新加坡国立大学工业和系统工程硕士；有毕马威技术咨询和广发基金数据分析两段实习；竞赛/科研覆盖机器学习预测建模、数学建模、量化投资策略。",
+    "target_roles": ["数据分析", "机器学习/数据科学", "量化/金融科技", "技术咨询", "电子商务"],
+    "_note": "Why-company / 职业目标等开放题需按具体岗位定制，此文件只放通用素材。"
+  }
+}

@@ -1,0 +1,885 @@
+import { AppError } from "../util/errors.js";
+import { logger } from "../util/logger.js";
+import { pickNumericBandIndex } from "../drafting/numericBands.js";
+import { getAtsCredentials, type AtsCredentials } from "./credentials.js";
+
+/**
+ * Workday's pre-form flow.
+ *
+ * Unlike Greenhouse, Lever and Ashby, a Workday posting does not show a form.
+ * It shows a job advert with an Apply button, then a modal, then a sign-in wall.
+ * The application itself only appears once an account exists on that employer's
+ * tenant, and every employer is a separate tenant with a separate account.
+ *
+ * Selectors here are Workday's own `data-automation-id` values, which are
+ * stable across tenants because they come from the platform rather than the
+ * employer's configuration.
+ */
+
+type Page = {
+  goto: (url: string, options?: unknown) => Promise<unknown>;
+  locator: (selector: string) => Locator;
+  url: () => string;
+  waitForTimeout: (ms: number) => Promise<void>;
+  waitForLoadState: (state: string, options?: unknown) => Promise<void>;
+  evaluate: (fn: unknown, arg?: unknown) => Promise<unknown>;
+  reload: (options?: unknown) => Promise<unknown>;
+  keyboard: {
+    press: (key: string) => Promise<void>;
+    type: (text: string, options?: unknown) => Promise<void>;
+  };
+};
+type Locator = {
+  first: () => Locator;
+  nth: (index: number) => Locator;
+  count: () => Promise<number>;
+  click: (options?: unknown) => Promise<void>;
+  fill: (value: string, options?: unknown) => Promise<void>;
+  isVisible: () => Promise<boolean>;
+  waitFor: (options?: unknown) => Promise<void>;
+  locator: (selector: string) => Locator;
+  allInnerTexts: () => Promise<string[]>;
+};
+
+export const WORKDAY_HOST_PATTERN = /(^|\.)myworkdayjobs\.com$/i;
+
+export function isWorkdayUrl(rawUrl: string): boolean {
+  try {
+    return WORKDAY_HOST_PATTERN.test(new URL(rawUrl).hostname);
+  } catch {
+    return false;
+  }
+}
+
+const SEL = {
+  apply: '[data-automation-id="adventureButton"]',
+  applyManually: '[data-automation-id="applyManually"]',
+  useMyLastApplication: '[data-automation-id="useMyLastApplication"]',
+  signInWithEmail: '[data-automation-id="SignInWithEmailButton"]',
+  googleSignIn: '[data-automation-id="GoogleSignInButton"]',
+  email: '[data-automation-id="email"]',
+  password: '[data-automation-id="password"]',
+  verifyPassword: '[data-automation-id="verifyPassword"]',
+  createAccountSubmit: '[data-automation-id="createAccountSubmitButton"]',
+  signInSubmit: '[data-automation-id="signInSubmitButton"]',
+  signInLink: '[data-automation-id="signInLink"]',
+  createAccountLink: '[data-automation-id="createAccountLink"]',
+  errorBanner: '[data-automation-id="errorMessage"]',
+} as const;
+
+/**
+ * Controls that only exist once the application wizard is open. The step label
+ * is the primary signal - live Salesforce, NVIDIA and Adobe tenants all render
+ * it - with the wizard's own navigation and form fields as fallbacks for a
+ * tenant that omits the progress bar.
+ */
+const FORM_EVIDENCE = [
+  '[data-automation-id="progressBarActiveStep"]',
+  '[data-automation-id="bottom-navigation-next-button"]',
+  '[data-automation-id^="formField-"]',
+] as const;
+
+/**
+ * Evidence that the job advert itself has rendered. Workday is a single-page
+ * app: the careers shell (header, logo, "Sign In" link) paints immediately
+ * while the posting body arrives later. Waiting for one of these before
+ * reaching for the Apply button is what separates a slow tenant from a closed
+ * posting - Cisco's tenant rendered nothing but its header inside the old
+ * budget and was reported as "probably closed" while the posting was live.
+ */
+const ADVERT_EVIDENCE = [
+  SEL.apply,
+  '[data-automation-id="jobPostingHeader"]',
+  '[data-automation-id="jobPostingDescription"]',
+] as const;
+
+/**
+ * Longest body text a bare careers shell produces. Cisco's is roughly 60
+ * characters ("English | Sign In | Careers | Search for Jobs"); a real advert
+ * carries a title, location, requisition id and description and runs to
+ * thousands.
+ */
+const SHELL_TEXT_MAX = 200;
+
+/**
+ * Workday's own wording when a requisition has been pulled. Distinguishing this
+ * from "the wizard never opened" matters: a dead posting is final and the
+ * application should be withdrawn, whereas an unopened wizard is worth retrying.
+ */
+const DEAD_POSTING_TEXT = /page you are looking for (does ?n[o']?t|doesn't) exist|no longer (available|accepting)|job (posting )?(has been )?(closed|removed)|requisition .*(closed|no longer)/i;
+
+export function isDeadPostingText(text: string): boolean {
+  return DEAD_POSTING_TEXT.test(text);
+}
+
+export type AdvertState = "advert" | "dead" | "blank";
+
+/**
+ * Waits for the advert to paint, ending early on the tenant's not-found page.
+ *
+ * Element presence alone is not enough: a tenant serves the shell with empty
+ * `data-automation-id` containers already in the DOM, so a selector match
+ * reports a rendered advert over a blank page. The posting's own text is the
+ * reliable signal, so a body no longer than the surrounding chrome counts as
+ * not rendered.
+ *
+ * The three outcomes are genuinely different and must not be collapsed: an
+ * advert can be applied to, a dead posting never will be, and a blank page
+ * says nothing about whether the posting is open.
+ */
+async function awaitAdvert(page: Page, timeoutMs: number): Promise<AdvertState> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const paragraphs = await page.locator("body").allInnerTexts().catch(() => [] as string[]);
+    const text = paragraphs.join(" ").trim();
+
+    // Checked before the length gate: the not-found page is itself short.
+    const errorShown = await page.locator(SEL.errorBanner).first().isVisible().catch(() => false);
+    if (errorShown && isDeadPostingText(text)) return "dead";
+
+    if (text.length > SHELL_TEXT_MAX) {
+      for (const selector of ADVERT_EVIDENCE) {
+        const visible = await page.locator(selector).first().isVisible().catch(() => false);
+        if (visible) return "advert";
+      }
+    }
+    await page.waitForTimeout(1000);
+  }
+  return "blank";
+}
+
+export type WorkdayEntryResult = {
+  reached: "form" | "sign-in" | "blocked";
+  detail: string;
+  createdAccount: boolean;
+};
+
+/**
+ * Workday's dropdowns are not inputs, so a plain fill writes nowhere.
+ *
+ * The markup is a `multiSelectContainer` (or a `button[aria-haspopup=listbox]`)
+ * with a hidden text input beside it. The field collector only ever sees that
+ * input: filling it changes nothing the form reads, the run reports the field
+ * as filled, and Workday then refuses to save the page because the field is
+ * still empty. Every one of these has to be opened and an option clicked.
+ *
+ * Two traps are specific to this widget and both are load-bearing here:
+ *
+ * - An already-chosen value renders as a `selectedItem` pill that also carries
+ *   `role="option"`. It is a delete control, not a choice, so a page-wide
+ *   option query offers up other fields' answers and "choosing" one erases
+ *   them. Pills are excluded everywhere.
+ * - Long lists are nested one level ("Linkedin Jobs" under "Job Board") and
+ *   typing does not search into the categories, so a leaf is only reachable by
+ *   opening its parent. The menu has no back control that is safe to click -
+ *   the only back-looking button on the page is `backToJobPosting`, which
+ *   leaves the application - so each category is tried from a freshly reopened
+ *   menu instead.
+ */
+const WD_PILL = '[data-automation-id="selectedItem"]';
+const WD_MENU_ITEM = `[role="option"]:visible:not(${WD_PILL})`;
+const WD_MAX_CATEGORIES = 8;
+
+export type WorkdayPromptResult = { filled: boolean; detail: string };
+
+function promptContainer(field: Locator): Locator {
+  return field.locator(
+    '[data-automation-id="multiSelectContainer"], button[aria-haspopup="listbox"]',
+  );
+}
+
+/** True when this field is one of Workday's prompt widgets rather than a text input. */
+export async function isWorkdayPrompt(field: Locator): Promise<boolean> {
+  return (await promptContainer(field).count()) > 0;
+}
+
+/** A picker nests its options one level; a plain dropdown is flat. */
+async function isPicker(field: Locator): Promise<boolean> {
+  return (await field.locator('[data-automation-id="multiSelectContainer"]').count()) > 0;
+}
+
+async function closeMenu(page: Page): Promise<void> {
+  await page.keyboard.press("Escape").catch(() => undefined);
+  await page.waitForTimeout(300);
+}
+
+async function openMenu(page: Page, field: Locator): Promise<boolean> {
+  // A click that lands while a previously open menu is still closing is
+  // swallowed, which reads as "this widget offers nothing" and hides the real
+  // reason a required field stayed blank. One retry settles it.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await promptContainer(field)
+      .first()
+      .click({ timeout: 10_000 })
+      .catch(() => undefined);
+    await page.waitForTimeout(1_200);
+    if ((await page.locator(WD_MENU_ITEM).count()) > 0) return true;
+  }
+  return false;
+}
+
+/**
+ * The values already chosen.
+ *
+ * A picker shows them as pills; a plain dropdown has none and shows the choice
+ * as the button's own text, so both have to be read or a successful selection
+ * on a dropdown is misreported as a failure.
+ */
+const WD_PLACEHOLDER = /^(select one|select\.{0,3}|search|)$/i;
+
+async function chosenValues(field: Locator): Promise<string[]> {
+  const clean = (text: string): string => text.replace(/\s+/g, " ").trim();
+  const pills = field.locator(WD_PILL);
+  if ((await pills.count()) > 0) {
+    return (await pills.allInnerTexts()).map(clean).filter(Boolean);
+  }
+  const button = field.locator('button[aria-haspopup="listbox"]');
+  if ((await button.count()) > 0) {
+    return (await button.allInnerTexts()).map(clean).filter((text) => !WD_PLACEHOLDER.test(text));
+  }
+  return [];
+}
+
+/**
+ * Yes and no are too short to match on substrings: "no" appears inside "NOT",
+ * and "Yes, no restriction" contains both. A bare polarity answer therefore
+ * only takes an option that leads with the same word - the rule the option
+ * matcher already applies everywhere else.
+ */
+const WD_POLARITY = /^(yes|no)$/;
+
+/** Substring matching alone lets "no" hide inside "not" and answer the opposite. */
+function containsWord(haystack: string, needle: string): boolean {
+  const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, "i").test(haystack);
+}
+
+function matches(optionText: string, candidate: string): boolean {
+  const option = optionText.replace(/\s+/g, " ").trim().toLowerCase();
+  const wanted = candidate.replace(/\s+/g, " ").trim().toLowerCase();
+  if (!option || !wanted) return false;
+  if (WD_PLACEHOLDER.test(option)) return false;
+  if (isRefusal(option) && isRefusal(wanted)) return true;
+  if (WD_POLARITY.test(wanted)) return new RegExp(`^${wanted}\\b`, "i").test(option);
+  return option === wanted || containsWord(option, wanted) || containsWord(wanted, option);
+}
+
+/**
+ * Employers name the same choice differently, and a Workday prompt offers no
+ * free text to fall back on, so a stored answer has to be tried under the
+ * tenant's own vocabulary. NVIDIA lists a mobile number as "Home Cellular".
+ */
+const WD_SYNONYMS: readonly (readonly string[])[] = [["mobile", "cell", "cellular"]];
+
+/**
+ * A refusal to answer, however it is spelled.
+ *
+ * NVIDIA alone offers three spellings on one step - "Decline to State" for
+ * ethnicity and gender, "I DO NOT WISH TO SELF-IDENTIFY" for veteran status -
+ * and the stored answer says "decline to self-identify". Chasing that with a
+ * list of literals is a losing game, so both sides are recognised as refusals
+ * instead. Both must be refusals for this to apply, so a real answer can never
+ * be turned into a decline.
+ */
+const WD_REFUSAL =
+  /(decline to|prefer not to|do not wish to|don't wish to|do not want to|choose not to|rather not|wish not to|not to disclose|not to self.?identify|no response)/;
+
+function isRefusal(text: string): boolean {
+  return WD_REFUSAL.test(text);
+}
+
+function expand(candidate: string): string[] {
+  const lower = candidate.toLowerCase();
+  const group = WD_SYNONYMS.find((words) => words.some((word) => lower.includes(word)));
+  if (!group) return [candidate];
+  return [candidate, ...group.filter((word) => !lower.includes(word))];
+}
+
+/**
+ * Types into a prompt's search box so long taxonomies can be reached.
+ *
+ * Adobe's "Field of Study" offers thousands of majors and renders only the
+ * first handful, alphabetically: the visible options stopped at
+ * "Agricultural/Biological Engineering", so "Computer Science" appeared to be
+ * on offer nowhere and a required field was reported unfillable. Workday
+ * filters the list server-side as soon as anything is typed.
+ */
+async function searchMenu(page: Page, field: Locator, candidate: string): Promise<boolean> {
+  // Workday's search box carries no type attribute and is rendered into the
+  // popup rather than the field, so a field-scoped `input[type=text]` selector
+  // finds nothing at all — but a scoped selector that is loose enough to catch
+  // it also catches the widget's own hidden inputs, and typing into one of those
+  // filters nothing. Every plausible box is therefore tried in turn.
+  const SEARCH_BOX = 'input[placeholder="Search" i], input[role="combobox"], input:not([type]), input[type="text"]';
+  const boxes: { box: Locator; where: string }[] = [];
+  // The popup renders at the end of the document, and the board's own job search
+  // sits at the top, so the menu's box is the last visible one. It is tried
+  // first: typing into a widget's own hidden input filters nothing but does
+  // leave the field dirty.
+  const loose = page.locator('input[placeholder="Search" i]:visible');
+  const looseCount = Math.min(await loose.count(), 4);
+  for (let index = looseCount - 1; index >= 0; index -= 1) {
+    boxes.push({ box: loose.nth(index), where: `page[${index}/${looseCount}]` });
+  }
+  const scoped = field.locator(SEARCH_BOX);
+  const scopedCount = Math.min(await scoped.count(), 3);
+  for (let index = 0; index < scopedCount; index += 1) {
+    boxes.push({ box: scoped.nth(index), where: `field[${index}]` });
+  }
+  if (boxes.length === 0) {
+    lastSearchDetail = "no search box";
+    return false;
+  }
+
+  const before = await page.locator(WD_MENU_ITEM).count();
+  const attempts: string[] = [];
+  // A taxonomy names things its own way: Adobe's list of majors has no plain
+  // "Computer Science" entry, so the full phrase returns "No Items." while its
+  // first word reaches "Computer Science, General" and its neighbours.
+  const terms = [candidate, candidate.split(/[\s,/]+/)[0] ?? candidate].filter(
+    (term, index, all) => term.length >= 3 && all.indexOf(term) === index,
+  );
+  for (const { box, where } of boxes) {
+    for (const term of terms) {
+      let typed = true;
+      // `fill` sets the value in one shot without emitting key events, and
+      // Workday's filter is driven by keystrokes: a filled box left the list
+      // untouched. Focusing the box and typing for real is what narrows it.
+      await box.click({ timeout: 5_000 }).catch(() => {
+        typed = false;
+      });
+      await box.fill("").catch(() => undefined);
+      await page.keyboard.type(term, { delay: 60 }).catch(() => {
+        typed = false;
+      });
+      await page.waitForTimeout(2_000);
+      const after = await page.locator(WD_MENU_ITEM).count();
+      const narrowed = (await page.locator(WD_MENU_ITEM).allInnerTexts().catch(() => [] as string[]))
+        .map((text) => text.replace(/\s+/g, " ").trim())
+        .filter(Boolean);
+      const empty = narrowed.length === 0 || narrowed.every((text) => /^no items\.?$/i.test(text));
+      attempts.push(`${where} "${term}" typed=${typed} ${before}->${after}${empty ? " (empty)" : ""}`);
+      if (!empty && after !== before) {
+        lastSearchDetail = `${attempts.join("; ")}; narrowed to ${JSON.stringify(narrowed.slice(0, 6))}`;
+        return true;
+      }
+    }
+  }
+  lastSearchDetail = `${attempts.join("; ")}; ${await describeInputs(page)}`;
+  return false;
+}
+
+/** Describes the page's visible inputs so a failed search explains itself. */
+async function describeInputs(page: Page): Promise<string> {
+  const script = `(() => {
+    const seen = [];
+    for (const el of Array.from(document.querySelectorAll("input"))) {
+      const box = el.getBoundingClientRect();
+      if (box.width === 0 || box.height === 0) continue;
+      seen.push([el.getAttribute("type") || "-", el.getAttribute("placeholder") || "-", el.getAttribute("data-automation-id") || "-"].join("/"));
+    }
+    return seen.slice(0, 12).join(" | ");
+  })()`;
+  return (await page.evaluate(script).catch(() => "")) as string;
+}
+
+/** What the last search attempt did, so a mismatch explains itself. */
+let lastSearchDetail = "not attempted";
+
+async function clickMatch(page: Page, candidate: string): Promise<boolean> {
+  const items = page.locator(WD_MENU_ITEM);
+  const texts = await items.allInnerTexts().catch(() => [] as string[]);
+  const hits = texts
+    .map((text, index) => ({ text, index }))
+    .filter((entry) => matches(entry.text, candidate));
+  if (hits.length === 0) return false;
+  // The least qualified match wins, the same rule the option matcher uses
+  // elsewhere: given "Cellular" and "Work Cellular", the bare one is meant.
+  hits.sort((a, b) => a.text.length - b.text.length);
+  await items.nth(hits[0]!.index).click({ timeout: 10_000 });
+  await page.waitForTimeout(1_000);
+  return true;
+}
+
+/**
+ * Removes anything this pass added, so a prompt that could not be answered is
+ * left exactly as it was found.
+ *
+ * The undo used to be one unverified click on the pill, made while the menu was
+ * still open and overlaying it. When it missed, Adobe's application kept
+ * "Agricultural/Biological Engineering and Bioengineering" in Field of Study —
+ * a major the candidate never studied, on a field the step does not require, so
+ * nothing stopped it being submitted. A stray value here is a fabricated claim,
+ * which is worse than an empty field.
+ */
+async function clearAddedValues(
+  page: Page,
+  field: Locator,
+  before: readonly string[],
+): Promise<boolean> {
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const current = await chosenValues(field);
+    if (current.length <= before.length) return true;
+    // The pill only becomes clickable once the popup stops covering it.
+    await closeMenu(page);
+    const pills = field.locator(WD_PILL);
+    const pill = pills.nth(Math.max((await pills.count()) - 1, 0));
+    const remove = pill.locator('button, [role="button"], [data-automation-id*="delete" i], svg').first();
+    const target = (await remove.count()) > 0 ? remove : pill;
+    await target.click({ timeout: 5_000 }).catch(() => undefined);
+    await page.waitForTimeout(500);
+  }
+  return (await chosenValues(field)).length <= before.length;
+}
+
+/**
+ * Chooses a value in a Workday prompt, reporting honestly when it cannot.
+ *
+ * The caller must be able to tell a real selection from a no-op, so success is
+ * confirmed by re-reading the widget's pills rather than by the click resolving.
+ */
+export async function fillWorkdayPrompt(
+  page: Page,
+  field: Locator,
+  candidates: readonly string[],
+): Promise<WorkdayPromptResult> {
+  const before = await chosenValues(field);
+  const already = before.find((value) => candidates.some((candidate) => matches(value, candidate)));
+  if (already) return { filled: true, detail: `already set to ${already}` };
+  // A prompt that takes one value rejects a second, so anything already chosen
+  // by a previous pass of the wizard loop is left alone.
+  if (before.length > 0) return { filled: true, detail: `already set to ${before.join(", ")}` };
+
+  for (const candidate of candidates.flatMap(expand)) {
+    await closeMenu(page);
+    if (!(await openMenu(page, field))) continue;
+
+    if (await clickMatch(page, candidate)) {
+      const after = await chosenValues(field);
+      if (after.length > before.length) return { filled: true, detail: `selected ${after.join(", ")}` };
+    }
+
+    // Not among the options rendered so far, which for a long taxonomy is only
+    // the first page of an alphabetical list. Typing narrows it to the answer.
+    if (await searchMenu(page, field, candidate)) {
+      if (await clickMatch(page, candidate)) {
+        const after = await chosenValues(field);
+        if (after.length > before.length) return { filled: true, detail: `searched and selected ${after.join(", ")}` };
+      }
+    }
+
+    // Only a picker nests its options. A plain dropdown is flat, and "opening"
+    // one of its entries would select it, so probing there would quietly answer
+    // the question with whatever was tried first.
+    if (!(await isPicker(field))) continue;
+
+    // Not offered at the top level: try each category from a fresh menu.
+    await closeMenu(page);
+    if (!(await openMenu(page, field))) continue;
+    const categories = (await page.locator(WD_MENU_ITEM).allInnerTexts().catch(() => [] as string[]))
+      .map((text) => text.replace(/\s+/g, " ").trim())
+      .filter(Boolean)
+      .slice(0, WD_MAX_CATEGORIES);
+
+    for (const category of categories) {
+      await closeMenu(page);
+      if (!(await openMenu(page, field))) break;
+      if (!(await clickMatch(page, category))) continue;
+
+      // An entry that turned out to be a value rather than a category has just
+      // answered the question. Undo it: the pill is its own delete control.
+      const opened = await chosenValues(field);
+      if (opened.length > before.length) {
+        if (opened.some((value) => matches(value, candidate))) {
+          return { filled: true, detail: `selected ${opened.join(", ")}` };
+        }
+        const cleared = await clearAddedValues(page, field, before);
+        if (!cleared) {
+          return {
+            filled: false,
+            detail: `left ${JSON.stringify(await chosenValues(field))} selected and could not clear it; the field now states something that was never answered`,
+          };
+        }
+        // Every entry in a flat taxonomy is a value, so there are no categories
+        // to open and each further probe only risks another stray selection.
+        // Adobe's Field of Study lists thousands of majors this way.
+        break;
+      }
+
+      if (!(await clickMatch(page, candidate))) continue;
+      const after = await chosenValues(field);
+      if (after.length > before.length) {
+        return { filled: true, detail: `selected ${after.join(", ")} under ${category}` };
+      }
+    }
+  }
+
+  // Nothing matched by wording. A question whose options are numeric ranges is
+  // still answerable from a stated figure: "5" is not a substring of "4+ years"
+  // but it is the band that contains it. Read the menu once, both to try that
+  // and to report what was on offer.
+  let offered: string[] = [];
+  if (await openMenu(page, field)) {
+    offered = (await page.locator(WD_MENU_ITEM).allInnerTexts().catch(() => [] as string[]))
+      .map((text) => text.replace(/\s+/g, " ").trim())
+      .filter(Boolean)
+      .slice(0, WD_MAX_CATEGORIES);
+    const band = pickNumericBandIndex(offered, candidates);
+    if (band >= 0) {
+      await page.locator(WD_MENU_ITEM).nth(band).click({ timeout: 10_000 }).catch(() => undefined);
+      await page.waitForTimeout(1_000);
+      const after = await chosenValues(field);
+      if (after.length > before.length) {
+        return { filled: true, detail: `selected band ${after.join(", ")}` };
+      }
+    }
+  }
+  // Say what was actually on offer. Without it every mismatch needs a bespoke
+  // browser probe to diagnose, because the wanted values are all the log shows.
+  await closeMenu(page);
+  // Last line of defence: whatever happened above, this prompt must end the
+  // pass holding exactly what it held at the start.
+  if (!(await clearAddedValues(page, field, before))) {
+    return {
+      filled: false,
+      detail: `left ${JSON.stringify(await chosenValues(field))} selected and could not clear it; the field now states something that was never answered`,
+    };
+  }
+  return {
+    filled: false,
+    detail: `no Workday option matched ${JSON.stringify(candidates)}; offered ${JSON.stringify(offered)}; search: ${lastSearchDetail}`,
+  };
+}
+
+const CLICK_FILTER = '[data-automation-id="click_filter"]';
+
+/**
+ * Workday intermittently replaces a wizard step with "Something went wrong.
+ * Please refresh the page and then try again." The page keeps its stepper and
+ * its chrome but loses every control, so a run that hits this collected no
+ * fields and reported the posting as dead - a confident, wrong diagnosis of a
+ * fault the page itself says is transient. Doing what it asks recovers it.
+ */
+const WD_TRANSIENT_ERROR = /something went wrong/i;
+
+export async function recoverWorkdayError(page: Page, attempts = 2): Promise<boolean> {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (!WD_TRANSIENT_ERROR.test(await visibleText(page, "body"))) return true;
+    await page.reload({ waitUntil: "domcontentloaded" }).catch(() => undefined);
+    await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => undefined);
+    await page.waitForTimeout(2_500);
+  }
+  return !WD_TRANSIENT_ERROR.test(await visibleText(page, "body"));
+}
+
+/**
+ * Builds the in-page script that clicks a Workday control.
+ *
+ * Workday renders every button twice: a real `<button>` carrying the
+ * data-automation-id, marked `aria-hidden` with `tabindex="-2"`, and a
+ * transparent `div[data-automation-id="click_filter"]` laid over it that holds
+ * `role="button"` and receives the pointer events. Clicking the button
+ * therefore never lands - the overlay intercepts it and Playwright retries
+ * until it times out. The overlay is what a person actually clicks.
+ *
+ * Where several overlays share an ancestor the aria-label picks the right one;
+ * an ambiguous group is left alone and the walk continues outwards, because
+ * clicking a neighbouring button is worse than not clicking at all.
+ */
+export function buildOverlayClickScript(selector: string): string {
+  return `(() => {
+    const target = document.querySelector(${JSON.stringify(selector)});
+    if (!target) return "missing";
+    const norm = (value) => (value || "").replace(/\\s+/g, " ").trim().toLowerCase();
+    const label = norm(target.textContent) || norm(target.getAttribute("aria-label"));
+    let node = target.parentElement;
+    for (let depth = 0; depth < 4 && node; depth += 1) {
+      const overlays = Array.from(node.querySelectorAll(${JSON.stringify(CLICK_FILTER)}));
+      if (overlays.length > 0) {
+        const match = overlays.length === 1
+          ? overlays[0]
+          : overlays.find((overlay) => norm(overlay.getAttribute("aria-label")) === label);
+        if (match) {
+          match.click();
+          return "overlay";
+        }
+      }
+      node = node.parentElement;
+    }
+    target.click();
+    return "direct";
+  })()`;
+}
+
+/**
+ * Clicks a control if it is present, reporting whether the click landed.
+ *
+ * Never throws. A control that cannot be clicked must leave the caller free to
+ * try the next route - a failed sign-in has to be able to fall through to
+ * registration rather than aborting the whole application.
+ */
+async function clickIfPresent(page: Page, selector: string, timeoutMs = 8000): Promise<boolean> {
+  const locator = page.locator(selector).first();
+  try {
+    await locator.waitFor({ state: "visible", timeout: timeoutMs });
+  } catch {
+    return false;
+  }
+
+  try {
+    await locator.click({ timeout: Math.min(timeoutMs, 5000) });
+    await page.waitForTimeout(2500);
+    return true;
+  } catch {
+    // Intercepted or detached; try the overlay Workday actually listens on.
+  }
+
+  let outcome = "failed";
+  try {
+    outcome = (await page.evaluate(buildOverlayClickScript(selector))) as string;
+  } catch {
+    return false;
+  }
+  if (outcome === "missing" || outcome === "failed") return false;
+  await page.waitForTimeout(2500);
+  return true;
+}
+
+async function visibleText(page: Page, selector: string): Promise<string> {
+  const count = await page.locator(selector).first().count();
+  if (count === 0) return "";
+  return (await page.evaluate(
+    `(() => { const e = document.querySelector(${JSON.stringify(selector)}); return e ? (e.innerText || '') : ''; })()`,
+  )) as string;
+}
+
+/**
+ * Reports whether the page is still showing a sign-in gate.
+ *
+ * Used to tell "signed in already" apart from "the credential form has not
+ * opened yet". Both states lack a password field, so absence alone cannot
+ * distinguish them and the provider chooser has to be looked for directly.
+ */
+async function atSignInWall(page: Page): Promise<boolean> {
+  for (const selector of [SEL.signInWithEmail, SEL.googleSignIn, SEL.email]) {
+    const visible = await page.locator(selector).first().isVisible().catch(() => false);
+    if (visible) return true;
+  }
+  return false;
+}
+
+/**
+ * Reports whether the application wizard is actually on screen.
+ *
+ * Needed for the same reason as the sign-in wall check, taken one step further:
+ * a missing password field and a missing provider chooser still do not prove the
+ * form was reached. A closed posting renders a "page does not exist" shell that
+ * has neither, so inferring success from those two absences reports a form that
+ * was never opened - and postings in this campaign close constantly.
+ */
+/**
+ * Wording of the wizard's first step, which is the account gate rather than the
+ * application. Every tenant probed renders the same eight-step progress bar and
+ * labels this step "Create Account/Sign In".
+ */
+const SIGN_IN_STEP_TEXT = /create account|sign ?in|log ?in/i;
+
+export function isSignInStepLabel(text: string): boolean {
+  return SIGN_IN_STEP_TEXT.test(text);
+}
+
+async function atApplicationForm(page: Page): Promise<boolean> {
+  // The account gate is step 1 of the wizard, so it renders the progress bar and
+  // a pair of `formField-` divs for email and password. Both are in
+  // FORM_EVIDENCE, which meant the sign-in box itself was read as the
+  // application form: the run then "collected" one field, filled nothing, and
+  // blamed the posting for being removed. The step label is what separates them.
+  const step = await page
+    .locator('[data-automation-id="progressBarActiveStep"]')
+    .first()
+    .allInnerTexts()
+    .catch(() => [] as string[]);
+  if (isSignInStepLabel(step.join(" "))) return false;
+
+  for (const selector of FORM_EVIDENCE) {
+    const visible = await page.locator(selector).first().isVisible().catch(() => false);
+    if (visible) return true;
+  }
+  return false;
+}
+
+/**
+ * Walks from a Workday job advert to its application form, signing in or
+ * registering as needed.
+ *
+ * Sign-in is always attempted before registration: an existing account must not
+ * be duplicated, and a "there is already an account" error is a far better
+ * outcome than a second account the candidate does not know about.
+ */
+export async function enterWorkdayApplication(
+  page: Page,
+  profileEmail: string,
+  options: { allowAccountCreation: boolean },
+): Promise<WorkdayEntryResult> {
+  const credentials: AtsCredentials = getAtsCredentials(profileEmail);
+
+  // The advert has to be on screen before the Apply button can be reached for.
+  // Without this the run raced the single-page app and blamed the posting.
+  const advert = await awaitAdvert(page, 45_000);
+
+  // A pulled requisition renders the tenant's not-found page, which has neither
+  // an Apply button nor a sign-in form. Naming it here stops the caller from
+  // retrying a posting that will never come back.
+  if (advert === "dead") {
+    return {
+      reached: "blocked",
+      detail: "the posting no longer exists; Workday served its not-found page",
+      createdAccount: false,
+    };
+  }
+
+  await clickIfPresent(page, SEL.apply, 15_000);
+  // The modal offers "Autofill with Resume" and "Apply Manually". Manual is the
+  // honest path: resume autofill silently invents field values from parsed text.
+  await clickIfPresent(page, SEL.applyManually, 8000);
+  await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => undefined);
+
+  // Newer tenants gate the credential form behind a provider chooser offering
+  // "Sign in with Google" or "Sign in with email". That page carries no email or
+  // password field at all, so the form has to be opened before it can be found.
+  // Measured at ~8s to paint on Workday's own tenant, so 6s lost the race.
+  await clickIfPresent(page, SEL.signInWithEmail, 20_000);
+
+  const onAccountPage = await page.locator(SEL.password).first().isVisible().catch(() => false);
+  if (!onAccountPage) {
+    // An absent password field is not evidence of being signed in - it is also
+    // what a provider chooser looks like. Claiming "form reached" there sends the
+    // caller off to fill a form that does not exist, so the wall is named instead.
+    if (await atSignInWall(page)) {
+      return {
+        reached: "sign-in",
+        detail: "stopped at the sign-in wall; the credential form did not open",
+        createdAccount: false,
+      };
+    }
+    if (!(await atApplicationForm(page))) {
+      return {
+        reached: "blocked",
+        detail: advert === "advert"
+          ? "no application form on screen and no sign-in gate; the posting is probably closed or the wizard never opened"
+          : "the job advert never rendered within 45s; the tenant is slow or is refusing this session, so whether the posting is open is unknown",
+        createdAccount: false,
+      };
+    }
+    return { reached: "form", detail: "already signed in; application form reached", createdAccount: false };
+  }
+
+  const signedIn = await signIn(page, credentials);
+  if (signedIn.ok) return { reached: "form", detail: signedIn.detail, createdAccount: false };
+
+  if (!options.allowAccountCreation) {
+    return { reached: "sign-in", detail: `${signedIn.detail}; account creation not permitted`, createdAccount: false };
+  }
+
+  const created = await createAccount(page, credentials);
+  return {
+    reached: created.ok ? "form" : "blocked",
+    detail: created.detail,
+    createdAccount: created.ok,
+  };
+}
+
+async function signIn(page: Page, credentials: AtsCredentials): Promise<{ ok: boolean; detail: string }> {
+  // The account page opens in either mode depending on tenant; switch to sign-in
+  // when the confirm-password field shows we landed on registration.
+  const onCreate = await page.locator(SEL.verifyPassword).first().isVisible().catch(() => false);
+  if (onCreate) {
+    const switched = await clickIfPresent(page, SEL.signInLink, 5000);
+    if (!switched) return { ok: false, detail: "could not switch to the sign-in form" };
+  }
+
+  await page.locator(SEL.email).first().fill(credentials.email);
+  await page.locator(SEL.password).first().fill(credentials.password);
+  await clickIfPresent(page, SEL.signInSubmit, 8000);
+  await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => undefined);
+
+  const stillOnPassword = await page.locator(SEL.password).first().isVisible().catch(() => false);
+  if (!stillOnPassword) return { ok: true, detail: "signed in to an existing account" };
+
+  const error = (await visibleText(page, SEL.errorBanner)).trim();
+  return { ok: false, detail: error ? `sign-in refused: ${error.slice(0, 200)}` : "sign-in did not complete" };
+}
+
+async function createAccount(page: Page, credentials: AtsCredentials): Promise<{ ok: boolean; detail: string }> {
+  const onSignIn = await page.locator(SEL.verifyPassword).first().isVisible().catch(() => false);
+  if (!onSignIn) {
+    const switched = await clickIfPresent(page, SEL.createAccountLink, 5000);
+    if (!switched) return { ok: false, detail: "could not reach the create-account form" };
+  }
+
+  await page.locator(SEL.email).first().fill(credentials.email);
+  await page.locator(SEL.password).first().fill(credentials.password);
+  await page.locator(SEL.verifyPassword).first().fill(credentials.password);
+
+  // Workday requires its own terms checkbox on some tenants. It is a plain
+  // acknowledgement of the privacy notice, which the campaign already auto-ticks.
+  await page
+    .locator('[data-automation-id="createAccountCheckbox"]')
+    .first()
+    .click()
+    .catch(() => undefined);
+
+  await clickIfPresent(page, SEL.createAccountSubmit, 8000);
+  await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => undefined);
+
+  const stillOnCreate = await page.locator(SEL.verifyPassword).first().isVisible().catch(() => false);
+  if (!stillOnCreate) {
+    logger.info("workday account created", { host: new URL(page.url()).hostname });
+    return { ok: true, detail: "created a new account on this employer's tenant" };
+  }
+
+  const error = (await visibleText(page, SEL.errorBanner)).trim();
+  return {
+    ok: false,
+    detail: error ? `account creation refused: ${error.slice(0, 200)}` : "account creation did not complete",
+  };
+}
+
+/**
+ * Advances the multi-step application wizard by one page.
+ *
+ * Workday splits an application across My Information, My Experience,
+ * Application Questions, Voluntary Disclosures and Review. Each page must be
+ * saved before the next one exists, so fields cannot all be collected up front.
+ *
+ * The advance control is named differently across Workday versions - a live
+ * NVIDIA tenant labels it "Save and Continue" under `pageFooterNextButton` and
+ * has no `bottom-navigation-next-button` at all - so each known id is tried in
+ * turn rather than assuming one.
+ */
+export async function advanceWorkdayStep(page: Page): Promise<boolean> {
+  for (const selector of NEXT_BUTTONS) {
+    const advanced = await clickIfPresent(page, selector, 8000);
+    if (!advanced) continue;
+    await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => undefined);
+    return true;
+  }
+  return false;
+}
+
+const NEXT_BUTTONS = [
+  '[data-automation-id="pageFooterNextButton"]',
+  '[data-automation-id="bottom-navigation-next-button"]',
+] as const;
+
+/** Reads the wizard's current step label, used to report progress honestly. */
+export async function workdayStepName(page: Page): Promise<string> {
+  const text = await visibleText(page, '[data-automation-id="progressBarActiveStep"]');
+  return text.trim();
+}
+
+export function assertWorkdaySupported(rawUrl: string): void {
+  if (!isWorkdayUrl(rawUrl)) {
+    throw new AppError("not_workday", `${rawUrl} is not a Workday board`);
+  }
+}

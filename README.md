@@ -51,11 +51,12 @@
 └── mcp/autoapply-mcp/      # autoapply-mcp 源码（TypeScript MCP server）
 ```
 
-## Excel 维护命令示例
+## Project-specific skills and MCP
 
-```bash
-python scripts/update_job_excel.py summary
-python scripts/update_job_excel.py append-job --json '{"job_id":"demo","Company Name":"DemoCo","Job Title":"Analyst"}'
-python scripts/update_job_excel.py mark-applied --job-id demo --submitted Yes --status submitted
-python scripts/update_job_excel.py update-status --job-id demo --status "under review"
-```
+### Skills
+
+- [`xlsx`](.hermes/skills/xlsx/SKILL.md) — project-local Excel / CSV skill，用于创建、读取、编辑 `.xlsx` workbook，并提供 `xlsx_read.py`、`xlsx_edit.py`、`xlsx_create.py` 等 helper scripts。
+
+### MCP
+
+- [`autoapply-mcp`](mcp/autoapply-mcp/README.md) — project-local job-application MCP server，用于 ATS 岗位发现、匹配评分、申请 packet 准备和受控提交流程；本项目仍遵守半自动边界：不自动点击最终 Submit。

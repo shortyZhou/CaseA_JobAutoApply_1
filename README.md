@@ -55,8 +55,8 @@
 
 ### Skills
 
-- [`xlsx`](.hermes/skills/xlsx/SKILL.md) — project-local Excel / CSV skill，用于创建、读取、编辑 `.xlsx` workbook，并提供 `xlsx_read.py`、`xlsx_edit.py`、`xlsx_create.py` 等 helper scripts。
+- [`xlsx`](https://github.com/NousResearch/hermes-agent/blob/main/skills/productivity/xlsx/SKILL.md) — Nous Research 原版 Excel / CSV skill；本项目在 `.hermes/skills/xlsx/` 保留 project-local 副本，用于创建、读取、编辑 `.xlsx` workbook，并提供 `xlsx_read.py`、`xlsx_edit.py`、`xlsx_create.py` 等 helper scripts。
 
 ### MCP
 
-- [`autoapply-mcp`](mcp/autoapply-mcp/README.md) — project-local job-application MCP server，用于 ATS 岗位发现、匹配评分、申请 packet 准备和受控提交流程；本项目仍遵守半自动边界：不自动点击最终 Submit。
+- [`autoapply-mcp`](https://github.com/niragmehta/autoapply-mcp) — niragmehta 原版 job-application MCP server；本项目在 `mcp/autoapply-mcp/` 保留 project-local 副本，用于 ATS 岗位发现、匹配评分、申请 packet 准备和受控提交流程；本项目仍遵守半自动边界：不自动点击最终 Submit。

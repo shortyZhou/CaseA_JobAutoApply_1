@@ -16,6 +16,10 @@
    - 检查已投递岗位的状态更新；有更新则在「已投递记录」追加 `投递状态N`、`更新时间N` 列（N 按第几次检测顺次编号），无更新则不改动。
 6. **数据安全规则** — 未经用户允许，不得删除或更新 Excel 中的任何已有信息。
 
+## Agent SOUL 设定
+
+`SOUL.md` 定义本项目 Agent 的角色边界与协作原则：Agent 以 **Semi-Automated Job Application Workflow Engineer** 和 **Job Search Strategy Consultant** 身份工作，围绕 `Search → Filter → Fill → Confirm → Track` 流程进行求职投递自动化设计与执行。其核心要求包括：不自动提交最终申请、不猜测敏感字段、尊重平台规则、按中英文场景选择合适简历与资料源，并以结构化数据作为投递与追踪的单一事实来源。
+
 ## 重要路径说明
 
 ### 简历放置位置（Resume）
@@ -47,6 +51,7 @@
 ├── scripts/                # Excel 维护、简历转换、状态检查等脚本
 ├── logs/                   # 运行日志（job search / autofill / status check）
 ├── backups/                # Excel 等文件的时间戳备份
+├── SOUL.md                 # 本项目 Agent 的身份、原则、沟通风格与行为边界
 ├── .autoapply/             # autoapply-mcp 运行数据（profile.json、公司列表、数据库、投递用简历）
 └── mcp/autoapply-mcp/      # autoapply-mcp 源码（TypeScript MCP server）
 ```
